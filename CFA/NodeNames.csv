@@ -1,0 +1,56 @@
+NodeName,NewName,Descript
+BLDFIE,BlkDen,Soil bulk density from SoilGrids
+CHELSA_Interann_Temp,CH-IntAnnT,Interannual temperature variablility from CHELSA
+CHELSA_Tmax_Spr,CH-Tmax.spr,Maximum spring temperature from CHELSA
+CO_Spr,CO.spr,CO concentration in spring
+CO_Sum,CO.sum,CO concentration in summer
+SMN_Spr,SMN.spr,smoothed NDVI in spring
+SMT_Spr,SMT.spr,smoothed brightness temperature in spring
+HWSD_Topsoil_sand_fraction,TS.Sand,topsoil sand fraction
+IGBP_DIS_Soil_pH,DIS-pH,soil pH from IGBP-DIS
+SS_pH,SS-pH,subsoil pH
+CHELSA_BIO17,CH-BIO17,BIO17 from CHELSA
+CRU_Cld_Spr,Cld.spr,Percent cloud cover in spring
+CRU_Cld_Sum,Cld.sum,Percent cloud cover in summer
+CRU_Wet_Spr,Wet.spr,Number of wet days in spring
+CRU_Wet_Sum,Wet.sum,Number of wet days in summer
+GPCC_Sum,GPCC.sum,Precipitation in summer from GPCC
+Net_rad_Sum,Rad.sum,Net radiation in summer
+NO2_Spr,NO2.spr,NO2 concentration in spring
+O3_Sum,O3.sum,O3 concentration in summer
+SMT_Sum,SMT.sum,smoothed brightness temperature in summer
+WB_DNI,DNI,direct normal irradiation
+WC2_BIO15,WC-BIO15,BIO15 from WorldClim2
+CHELSA_BIO2,CH-BIO2,BIO2 from CHELSA
+CRU_Dtr_Spr,DRT.spr,diurnal temperature range in spring
+Dist2Coast,D2C,distance to coast
+WC2_BIO2,WC-BIO2,BIO2 from WorldClim
+WEA_Spr,WEA.spr,water equivalent anomaly spring
+CHELSA_Tmin_Spr,CH-Tmin.spr,minimium temp in spring from CHELSA
+CRU_Frs_Spr,Frs.spr,frost day frequency in spring
+CRU_Tmn_Sum,Tmin.sum,minimum temperature in summer
+CRU_Vap_Spr,Vap.spr,vapour pressure in spring
+CRUVap_Sum,Vap.sum,vapour pressure in summer
+Prec_water_Spr,Prec.spr,total precipitable water (water vapor) in spring
+Prec_water_Sum,Prec.sum,total precipitable water (water vapor) in summer
+SuitAg,SuitAg,suitability for agriculture
+WC2_WVP_Sum,WC-WVP.sum,water vapor pressure in summer from WorldClim2
+ET,ET,evapotranspiration
+GPP_Sum,GPP.sum,gross primary production in summer
+LAI_Sum,LAI.sum,leaf area index in summer
+NDVI_Spr,NDVI.spr,NDVI in spring
+NPP_Sum,NPP.sum,net primary production in summer
+SMN_Sum,SMN.sum,smoothed NDVI in summer
+TCI_Spr,TCI.spr,temperature condition index in spring
+TCI_Sum,TCI.sum,temperature condition index in summer
+VCI_Spr,VCI.spr,vegetation condition index spring
+VCI_Sum,VCI.sum,vegetation condition index in summer
+VHI_Spr,VHI.spr,vegetation health index spring
+CHELSA_BIO3,CH-BIO3,BIO3 from CHELSA
+CHELSA_BIO8,CH-BIO8,BIO8 from CHELSA
+HWSD_Topsoil_ref_bulk_dens,TS-BlkDen,topsoil bulk density
+WC2_BIO19,WC-BIO19,BIO19 from WorldClim2
+WC2_BIO8,WC-BIO8,BIO8 from WorldClim2
+CHELSA_BIO13,CH-BIO13,BIO13 from CHELSA
+CHELSA_Interann_pre,CH-IntAnnP,interannual precipitation variablility from CHELSA
+CHELSA_Pre_Spr,CH-Prec.spr,precipitation in spring from CHELSA

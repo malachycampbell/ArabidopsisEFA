@@ -1,0 +1,10 @@
+MR1: CO_Spr, CO_Sum, SMT_Spr, SMN_Spr, CHELSA_Tmax_Spr, CHELSA_Interann_Temp, BLDFIE 
+MR2: NO2_Spr, O3_Sum, Net_rad_Sum, SMT_Sum, WB_DNI, GPCC_Sum, WC2_BIO15, CHELSA_BIO17, CRU_Cld_Spr, CRU_Cld_Sum, CRU_Wet_Spr, CRU_Wet_Sum 
+MR3: WEA_Spr, WC2_BIO2, CHELSA_BIO2, CRU_Dtr_Spr, Dist2Coast 
+MR4: Prec_water_Spr, Prec_water_Sum, WC2_WVP_Sum, CHELSA_Tmin_Spr, CRU_Frs_Spr, CRU_Tmn_Sum, CRU_Vap_Spr, CRUVap_Sum, SuitAg 
+MR5: NDVI_Spr, LAI_Sum, ET, GPP_Sum, NPP_Sum, SMN_Sum 
+MR6: TCI_Spr, TCI_Sum 
+MR7: VCI_Spr, VCI_Sum, VHI_Spr 
+MR8: WC2_BIO8, WC2_BIO19, CHELSA_BIO3, CHELSA_BIO8, HWSD_Topsoil_ref_bulk_dens 
+MR9: CHELSA_Pre_Spr, CHELSA_Interann_pre, CHELSA_BIO13 
+MR10: HWSD_Topsoil_sand_fraction, SS_pH, IGBP_DIS_Soil_pH
