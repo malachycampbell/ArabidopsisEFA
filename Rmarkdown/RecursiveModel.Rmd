@@ -1,0 +1,170 @@
+---
+title: "Recursive Model"
+author: "Malachy Campbell"
+date: "12/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Fitting the Recursive model
+
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+library(MTM)
+
+# Function to build M matrix
+buildRecursiveMat <- function(ThreshNet = NULL, PhenoOfInt = NULL){
+  ## Find Markov Blanket
+  Parents <- ThreshNet[ThreshNet$to %in% PhenoOfInt ,]
+  Children <- ThreshNet[ThreshNet$from %in% PhenoOfInt ,]
+  InLaws <- ThreshNet[ThreshNet$to %in% Children$to ,]
+  
+  ThreshNet <- unique(rbind(Parents, Children, InLaws))[1:2]
+  Nodes <- unique(c(ThreshNet$from, ThreshNet$to))
+  
+  RecurMat <- matrix(FALSE, ncol = length(Nodes), nrow = length(Nodes))
+  colnames(RecurMat) <- row.names(RecurMat) <- Nodes
+  
+  for(k in 1:nrow(ThreshNet)){
+    FROM <- which(colnames(RecurMat) == ThreshNet[k,1])
+    TO <- which(row.names(RecurMat) == ThreshNet[k,2])
+    
+    RecurMat[TO, FROM] <- T
+  }
+  
+  return(RecurMat)
+}
+```
+
+```{r, echo = T, eval = F}
+###
+tmp <- readRDS("BN/BN_thresh_all.rds")[[2]]
+Cnt.to <- table(ThreshNet$to)
+Cnt.from <- table(ThreshNet$from)
+Cnt.from <- Cnt.from[order(Cnt.from, decreasing = T)]
+Cnt.to <- Cnt.to[order(Cnt.to, decreasing = T)]
+
+foo <- merge(tmp, as.matrix(Cnt.from), by.x = "from", by.y = "row.names", all = T)
+colnames(foo)[5] <- "NoFrom"
+foo <- merge(foo, as.matrix(Cnt.to), by.x = "to", by.y = "row.names", all = T)
+colnames(foo)[6] <- "NoTo"
+foo <- foo[order(foo$NoTo) ,]
+foo <- foo[order(foo$NoFrom, decreasing = T) ,]
+
+
+
+#HC (1) is best
+tmp <- readRDS("BN/BN_thresh_all.rds")[[2]]
+
+G <- readRDS("MTM/G.rds")
+Ys <- as.data.frame(readRDS("MTM/Ys.rds"))[1:10]
+Plast <- readRDS("FW/Plast.rds")
+
+Ys <- merge(Ys, Plast, by.x = 0, by.y = "Acc", all = F)
+row.names(Ys) <- Ys$Row.names
+Ys$Row.names <- NULL
+
+G <- G[, colnames(G) %in% row.names(Ys)]
+G <- G[row.names(G) %in% row.names(Ys) ,]
+G <- G[, match(row.names(Ys), colnames(G))]
+G <- G[match(row.names(Ys), row.names(G)) ,]
+sum(row.names(G) == row.names(Ys)); sum(colnames(G) == row.names(Ys))
+
+ReMat <- buildRecursiveMat(ThreshNet = tmp, PhenoOfInt = colnames(Ys))
+
+nTraits <- ncol(Ys)
+
+Ys <- Ys[, colnames(Ys) %in% colnames(ReMat)]
+Ys <- Ys[, match(colnames(ReMat), colnames(Ys))]
+
+head(Ys)
+dim(Ys)
+
+fm_Recursive <- MTM(Y = Ys,
+                    K = list(list(K = G, 
+                                  COV = list(type = 'REC', M = ReMat, 
+                                             S0 = rep(1, ncol(ReMat)), df0 = rep(1, ncol(ReMat)), 
+                                             var = 100))),
+                    resCov = list(type = 'UN', S0 = diag(ncol(ReMat)), df0 = ncol(ReMat)),
+                    nIter = 10000,
+                    burnIn = 2000,
+                    thin = 5,
+                    saveAt='MTM/MTM_recMod_all')
+
+saveRDS(fm_Recursive, "RecursiveModel/Recursive_all.rds")
+```
+
+## Plot 
+Total heritability in diagonal, direct genomic correlation in lower triangle and total genomic correlation in upper triangle
+```{r , echo = T, eval = F}
+rm(list = ls())
+
+fm_Recursive <- readRDS("RecursiveModel/Recursive_all.rds")
+Lambda <- fm_Recursive$K[[1]]$B
+colnames(fm_Recursive$YHat)[c(10,11,13)] <- c("GT", "FT", "Fit") 
+colnames(Lambda) <- row.names(Lambda) <- colnames(fm_Recursive$YHat)
+
+#Direct
+dirCOV <- fm_Recursive$K[[1]]$G
+colnames(dirCOV) <- row.names(dirCOV) <- colnames(fm_Recursive$YHat)
+dirCOR <- cov2cor(dirCOV)
+
+ptOne <- solve(diag(ncol(dirCOV)) - Lambda)
+totalCOV <- ptOne %*% dirCOV %*% t(ptOne)
+colnames(totalCOV) <- row.names(totalCOV) <- colnames(fm_Recursive$YHat)
+totalCOR <- cov2cor(totalCOV)
+
+bigCor <- matrix(NA, ncol(totalCOR), ncol(totalCOR))
+bigCor[upper.tri(bigCor, diag = F)] <- totalCOR[upper.tri(totalCOR, diag = F)]
+bigCor[lower.tri(bigCor, diag = F)] <- dirCOR[lower.tri(dirCOR, diag = F)]
+diag(bigCor) <- NA
+colnames(bigCor) <- row.names(bigCor) <- colnames(fm_Recursive$YHat)
+
+G0 <- fm_Recursive$K[[1]]$G
+R0 <- fm_Recursive$resCov$R
+Iden <- diag(ncol(G0))
+
+totalH <- solve(Iden - Lambda) %*% G0 %*% solve(R0 + G0) %*% t(Iden - Lambda)
+
+diag(bigCor) <- diag(totalH)
+
+bigCor <- bigCor[,c(12, 1:9, 10, 11, 13)]
+bigCor <- bigCor[c(12, 1:9, 10, 11, 13),]
+
+write.csv(bigCor, "RecursiveModel/BigCOR.csv")
+```
+
+```{r, echo = T, eval = F}
+#Plot with total heritability in diagonal, direct genomic correlation in lower triangle and total genomic correlation in upper triangle
+pdf("Figures/Fig4.pdf", h = 2.6, w = 2.6, useDingbats = F, pointsize = 10)
+par(mar=c(3,3,1.5,1.5), mgp=c(1.8,0.5,0))
+
+corrplot(bigCor, is.corr = T, type = "full", order = "original", tl.col = "black", tl.cex = 0.5, cl.cex = 0.6)
+
+dev.off()
+```
+
+## Table for strucutral coefficients
+```{r, echo = T, eval = F}
+library(xtable)
+
+rm(list = ls())
+fm_Recursive <- readRDS("RecursiveModel/Recursive_all.rds")
+Lambda <- fm_Recursive$K[[1]]$B
+colnames(fm_Recursive$YHat)[c(10,11,13)] <- c("GT", "FT", "Fit") 
+colnames(Lambda) <- row.names(Lambda) <- colnames(fm_Recursive$YHat)
+orderIndx <- c(12, 1:11, 13)
+Lambda <- Lambda[orderIndx ,]
+Lambda <- Lambda[, orderIndx]
+Lambda <- round(Lambda, 2)
+Lambda <- as.data.frame(Lambda)
+
+Lambda[Lambda == 0] <- "-"
+
+xtable(Lambda)
+```

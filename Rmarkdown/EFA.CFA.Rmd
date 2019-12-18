@@ -1,0 +1,784 @@
+---
+title: "Arabidopsis Clim Data - EFA/CFA"
+author: "Malachy Campbell"
+date: "7/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data prep
+
+## Climate data
+```{r, echo = T, eval = F}
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+clim <- phenoclim[8:212]
+pheno <- phenoclim[213:ncol(phenoclim)]
+
+row.names(clim) <- phenoclim$id
+row.names(pheno) <- phenoclim$id
+
+#Filter out phenotypes with a lot of missing data
+missing.freq.pheno <- apply(pheno, 2, function(x){ sum(is.na(x)) / length(x) })
+
+length(missing.freq.pheno[missing.freq.pheno < 0.75]) #eight phenotypes
+pheno <- pheno[, missing.freq.pheno < 0.75]
+
+
+#Filter out phenotypes with a lot of missing phenotype data
+missing.freq.acc <- apply(pheno, 1, function(x){ sum(is.na(x)) / length(x) })
+missing.Indx <- missing.freq.acc[missing.freq.acc >= 0.8] #153 accessions
+length(missing.Indx)
+
+pheno <- pheno[- missing.Indx ,]
+clim <- clim[- missing.Indx ,]
+
+#write.table(pheno, "phenoClim/pheno_clean.txt", sep = " ", col.names = T, row.names = T, quote = F)
+write.table(clim, "phenoClim/clim_clean.txt", sep = " ", col.names = T, row.names = T, quote = F)
+```
+
+Prep for climate data.
+```{r, echo = T, eval = F}
+clim <- read.delim("phenoClim/clim_clean.txt", sep = " ", header = T, row.names = 1)
+
+str(clim)
+clim.classes <- sapply(clim, class)
+
+clim <- clim[,-which(clim.classes == "factor")]
+
+missing.freq <- apply(clim, 2, function(x){sum(is.na(x))/length(x)})
+clim <- clim[,which(missing.freq < 0.2)]
+
+write.table(clim, "phenoClim/clim_clean.txt", sep = " ", col.names = T, row.names = T, quote = F)
+```
+
+## Genotypic data
+Not included due to file size.
+```{r, echo = T, eval = F}
+FAM <- read.table("1001G.fam", header = F, sep = " ")
+
+FAM <- FAM[FAM$V1 %in% row.names(pheno) ,]
+
+write.table(FAM, "ccs2keep.txt", sep = " ", col.names = F, row.names = F, quote = F)
+
+
+BIM <- read.table("1001G.bim", header = F, sep = "\t")
+BIM$V2 <- paste0("SNP.", BIM$V1, ".", BIM$V4)
+write.table(BIM, "1001G.bim", sep = "\t", col.names = F, row.names = F, quote = F)
+```
+
+```{bash, echo = T, eval = F}
+plink --bfile 1001G --keep accs2keep.txt --indep 50 5 3.6 --out 1001Gaccs 
+
+plink --bfile 1001G --maf 0.05 --extract 1001Gaccs.prune.in --make-bed --out 1001Gaccs_pruned 
+```
+
+
+
+
+# Exploratory Factor Analysis
+## Descriptive statistics
+```{r, echo = T, eval = F}
+library(moments)
+library(gplots)
+library(caret)
+
+clim <- read.delim("phenoClim/clim_clean.txt", sep = " ", header = T, row.names = 1)
+
+# Categorical variables
+clim$Bailey_ecoregions <- NULL
+clim$SoilGrids_TAXNWRB <- NULL
+clim$SoilGrids_TAXOUSDA <- NULL
+clim$Land_cover_2000 <- NULL
+clim$Geological_ages <- NULL
+clim$Soil_types <- NULL
+clim$Koppen_Geiger <- NULL
+clim$Distribution_of_Cultivation_Intensity <- NULL
+
+no.vals <- apply(clim, 2, function(x){ length(unique(x))/length(x) })
+no.vals[order(no.vals)]
+
+keep.traits <- names(no.vals[no.vals >= 0.20])
+
+clim <- clim[, colnames(clim) %in% keep.traits] #1130  137
+
+## Check for skewness
+pdf("Figures/Hists_HighCorIn.pdf", h = 4, w = 4)
+for(i in 1:ncol(clim)){
+  hist(clim[,i], main = colnames(clim)[i])
+}
+dev.off()
+
+skews <- apply(clim, 2, skewness, na.rm = T)
+
+skews[order(abs(skews))]
+
+#Drop variables with |skewness| >= 3
+keep.traits <- names(skews[abs(skews) <= 3])
+length(keep.traits) #131
+
+clim <- clim[, colnames(clim) %in% keep.traits]
+dim(clim) #1130   131
+
+sc.clim <- scale(as.matrix(clim), center = T, scale = T)
+
+clim.cor <- cor(sc.clim, use = "complete.obs", method = "spearman")
+
+pdf("Figures/HeatMap_clim_HighCorIn.pdf", h = 6, w = 6)
+heatmap.2(clim.cor, Rowv = T, Colv = T, cexRow = 0.25, cexCol = 0.25, trace = 'none')
+dev.off()
+
+highlyCorrelated <- findCorrelation(cor(sc.clim, use = "complete.obs"),
+                                     verbose = FALSE,
+                                     cutoff = 0.80, names = FALSE)
+length(highlyCorrelated) #76
+sc.clim <- sc.clim[,-(highlyCorrelated)]
+dim(sc.clim) #1130 x 55
+
+clim.cor <- cor(sc.clim, use = "complete.obs", method = "spearman")
+
+pdf("Figures/HeatMap_clim_HighCorOut.pdf", h = 6, w = 6)
+heatmap.2(clim.cor, Rowv = T, Colv = T, cexRow = 0.25, cexCol = 0.25, trace = 'none')
+dev.off()
+```
+
+Rename variables with shorter names
+```{r, echo = T, eval = F}
+#Checks
+kmo.res <- KMO(clim.cor) #overall = 0.84
+
+#Rename varibles with shortwer names
+Names <- read.csv("EFA/NamesandColors.csv")
+Names <- Names[Names$Old.Name %in% colnames(sc.clim) ,]
+
+Names <- Names[match(colnames(sc.clim), Names$Old.Name) ,]
+sum(colnames(sc.clim) == Names$Old.Name)
+colnames(sc.clim) <- Names$NewName
+saveRDS(sc.clim, "EFA/sc.clim_7-31.rds")
+```
+
+Quantile normalization
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+sc.clim <- readRDS("EFA/sc.clim_7-31.rds")
+
+sc.clim <- t(sc.clim) #climate variables should be in rows and accessions in columns
+
+mat.qn <- apply(sc.clim, 1, function(exp.per.gene){
+            no.NA <- exp.per.gene[!is.na(exp.per.gene)]
+            idx <- sample(length(no.NA))
+            tmp <- qqnorm(no.NA[idx], plot.it=FALSE)$x
+            names(tmp) <- names(no.NA[idx])
+            tmp <- c(tmp, exp.per.gene[is.na(exp.per.gene)])
+            tmp[match(names(exp.per.gene), names(tmp))]
+        })
+
+saveRDS(mat.qn, "EFA/mat.qn_7-31.rds")
+```
+
+## Running EFA
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+mat.qn <- readRDS("EFA/mat.qn_7-31.rds")
+
+nofacts <- fa.parallel(x = mat.qn, n.iter = 1000, SMC = F, fm = "minres", fa = "fa", cor = "cor", use = "complete.obs", plot = T) #11
+fitfa <- fa(r = mat.qn, n.iter = 1000, rotate = "varimax", fm = "minres", nfactors = nofacts$nfact, SMC = F, impute = "mean", cor = "cor", use = "complete.obs")
+
+saveRDS(fitfa, "EFA/EFA_fit_r0.80.rds")
+
+
+#for supplemental file
+fitfa <- readRDS("EFA/EFA_fit_r0.80.rds")
+write.csv(fitfa$scores, "EFA/EFA_fit_r0.80_scores.csv")
+write.csv(fitfa$loadings, "EFA/EFA_fit_r0.80_loadings.csv")
+```
+
+## Confirmatory Factor Analysis
+Build model for CFA
+```{r, echo = T, eval = F}
+library(sem)
+rm(list = ls())
+
+fitfa <- readRDS("EFA/EFA_fit_r0.80.rds")
+
+efa.loadings <- unclass(fitfa$loadings)
+efa.loadings <- efa.loadings[,order(as.numeric(sub("MR", "", colnames(efa.loadings))))]
+bestfact <- apply(efa.loadings, 1, function(x) which(abs(x) == max(abs(x))))
+
+topVal <- apply(efa.loadings, 1, function(x) max(abs(x)))
+lowTraits <- names(topVal[topVal < 0.3]) #0 traits
+
+
+#Build model for CFA
+#bestfact <- bestfact[!names(bestfact) %in% lowTraits] #71 traits
+fact.cnts <- table(bestfact)
+#fact.cnts <- as.numeric(names(fact.cnts[fact.cnts > 1])) #factors 4 has only two that load; 10 total
+#bestfact <- bestfact[bestfact %in% fact.cnts]
+Facs <- unique(bestfact) #9 total
+length(Facs) #10
+
+fin <- NULL
+for (i in 1:length(Facs)){
+  tmp <- bestfact[bestfact == Facs[i]]
+  tmp.lhs <- paste0("MR", i, ": ")
+  tmp.rhs <- paste0(names(tmp), collapse = ", ")
+  fin <- c(fin, paste0(tmp.lhs, tmp.rhs))
+}
+
+foo <- paste0(fin, collapse = " \n ")
+```
+
+```{r, echo = T, eval = F}
+library(sem)
+library(stringr)
+library(reshape2)
+
+mat.qn <- readRDS("EFA/mat.qn_7-31.rds")
+cfa.set <- cfa(reference.indicators=FALSE, file = "CFA/lds.txt")
+ 
+sem.res <- sem(data = as.data.frame(mat.qn), model = cfa.set, na.action = na.pass)
+
+#Get factor scores
+fac.scrs <- fscores(model = sem.res, data = sem.res$data, center = F, scale = F)
+
+dim(fac.scrs)
+#[1] 1130   10
+
+#Get factor loading matrix
+facLoad <- sem.res$coeff[grep("lam", names(sem.res$coeff))]
+names(facLoad) <- gsub("lam\\[", "", names(facLoad))
+names(facLoad) <- gsub("\\]", "", names(facLoad))
+facLoad.meta <- str_split_fixed(names(facLoad), ":", 2)
+facLoad <- data.frame(LatFac = facLoad.meta[,2], Manifest = facLoad.meta[,1], lds = facLoad)
+
+facLoad <- dcast(facLoad, Manifest ~ LatFac, value.var = "lds")
+row.names(facLoad) <- facLoad$Manifest
+facLoad <- as.matrix(facLoad[2:ncol(facLoad)])
+facLoad[is.na(facLoad)] <- 0 
+
+
+saveRDS(facLoad, "CFA/facLoad.RDS")  
+saveRDS(sem.res, "CFA/sem.res.RDS")
+saveRDS(fac.scrs, "CFA/factor.scores.RDS")
+```
+
+## Plot
+Functions for factor diagram. Modified from psych package.
+```{r, echo = T, eval = F}
+dia.rect2 <- function (x, y = NULL, labels = NULL, cex = 1, xlim = c(0, 1), 
+    ylim = c(0, 1), rectCols = NULL, ...) 
+{
+    xrange = (xlim[2] - xlim[1])
+    yrange = (ylim[2] - ylim[1])
+    xs <- 0.1 * xrange
+    ys <- 0.1 * yrange
+    len <- max(strwidth(labels, units = "user", cex = cex, ...), 
+        strwidth("abc", units = "user", cex = cex, ...))/1.8
+    vert <- max(strheight(labels, units = "user", cex = cex, 
+        ...), strheight("ABC", units = "user", cex = cex, ...))/1
+    rect(x - len, y - vert, x + len, y + vert, col = rectCols)
+    text(x = x, y = y, labels = labels, cex = cex, ...)
+    left <- c(x - len, y)
+    right <- c(x + len, y)
+    top <- c(x, y + vert)
+    bottom <- c(x, y - vert)
+    radius <- sqrt(len^2 + vert^2)
+    dia.rect <- list(left = left, right = right, top = top, bottom = bottom, 
+        center = c(x, y), radius = radius)
+}
+
+fa.diagram2 <- function (fa.results, Phi = NULL, fe.results = NULL, sort = TRUE, 
+    labels = NULL, cut = 0.3, simple = TRUE, errors = FALSE, 
+    g = FALSE, digits = 1, e.size = 0.05, rsize = 0.15, side = 2, 
+    main, cex = NULL, marg = c(0.5, 0.5, 1, 0.5), adj = 1, ic = FALSE, varCols = NULL, 
+    ...) 
+{
+    if (length(class(fa.results)) > 1) {
+        if (class(fa.results)[2] == "principal") {
+            pc <- TRUE
+        }
+        else {
+            pc <- FALSE
+        }
+    }
+    else {
+        pc <- FALSE
+    }
+    if (ic) 
+        pc <- TRUE
+    old.par <- par(mar = marg)
+    on.exit(par(old.par))
+    col <- c("black", "red")
+    if (missing(main)) 
+        if (is.null(fe.results)) {
+            if (pc) {
+                main <- "Components Analysis"
+            }
+            else {
+                main <- "Factor Analysis"
+            }
+        }
+        else {
+            main <- "Factor analysis and extension"
+        }
+    if (!is.matrix(fa.results) && !is.null(fa.results$fa) && 
+        is.list(fa.results$fa)) 
+        fa.results <- fa.results$fa
+    if (is.null(cex)) 
+        cex <- 1
+    if (sort) {
+        if (g) {
+            temp <- fa.sort(fa.results[, -1])
+            temp2 <- fa.results[, 1]
+            fa.results <- cbind(g = temp2[rownames(temp)], temp)
+        }
+        else {
+            fa.results <- fa.sort(fa.results)
+        }
+        if (!is.null(fe.results)) {
+            fe.results <- fa.sort(fe.results)
+        }
+    }
+    if ((!is.matrix(fa.results)) && (!is.data.frame(fa.results))) {
+        factors <- as.matrix(fa.results$loadings)
+        if (!is.null(fa.results$Phi)) {
+            Phi <- fa.results$Phi
+        }
+        else {
+            if (!is.null(fa.results$cor)) {
+                Phi <- fa.results$cor
+            }
+        }
+    }
+    else {
+        factors <- fa.results
+    }
+    nvar <- dim(factors)[1]
+    if (is.null(nvar)) {
+        nvar <- length(factors)
+        num.factors <- 1
+    }
+    else {
+        num.factors <- dim(factors)[2]
+    }
+    nvar <- dim(factors)[1]
+    e.size = e.size * 16 * cex/nvar
+    if (is.null(nvar)) {
+        nvar <- length(factors)
+        num.factors <- 1
+    }
+    else {
+        num.factors <- dim(factors)[2]
+    }
+    if (is.null(rownames(factors))) {
+        rownames(factors) <- paste("V", 1:nvar, sep = "")
+    }
+    if (is.null(colnames(factors))) {
+        colnames(factors) <- paste("F", 1:num.factors, sep = "")
+    }
+    var.rect <- list()
+    fact.rect <- list()
+    max.len <- max(nchar(rownames(factors))) * rsize
+    x.max <- max((nvar + 1), 6)
+    limx = c(-max.len/2, x.max)
+    n.evar <- 0
+    if (!is.null(fe.results)) {
+        n.evar <- dim(fe.results$loadings)[1]
+        limy <- c(0, max(nvar + 1, n.evar + 1))
+    }
+    else {
+        limy = c(0, nvar + 1)
+    }
+    top <- max(nvar, n.evar) + 1
+    plot(0, type = "n", xlim = limx, ylim = limy, frame.plot = FALSE, 
+        axes = FALSE, ylab = "", xlab = "", main = main, ...)
+    max.len <- max(strwidth(rownames(factors)), strwidth("abc"))/1.8
+    limx = c(-max.len/2, x.max)
+    cex <- min(cex, 20/x.max)
+    if (g) {
+        left <- 0.3 * x.max
+        middle <- 0.6 * x.max
+        gf <- 2
+    }
+    else {
+        left <- 0
+        middle <- 0.5 * x.max
+        gf <- 1
+    }
+    for (v in 1:nvar) { #Rectangles for variables
+        var.rect[[v]] <- dia.rect2(left, top - v - max(0, n.evar - 
+            nvar)/2, rownames(factors)[v], xlim = limx, ylim = limy, 
+            cex = cex, rectCols = varCols[v], ...)
+    }
+    f.scale <- (top)/(num.factors + 1)
+    f.shift <- max(nvar, n.evar)/num.factors
+    if (g) {
+        fact.rect[[1]] <- dia.ellipse(-max.len/2, top/2, colnames(factors)[1], 
+            xlim = limx, ylim = limy, e.size = e.size, cex = cex, 
+            ...)
+        for (v in 1:nvar) {
+            if (simple && (abs(factors[v, 1]) == max(abs(factors[v, 
+                ]))) && (abs(factors[v, 1]) > cut) | (!simple && 
+                (abs(factors[v, 1]) > cut))) {
+                dia.arrow(from = fact.rect[[1]], to = var.rect[[v]]$left, 
+                  labels = round(factors[v, 1], digits), col = ((sign(factors[v, 
+                    1]) < 0) + 1), lty = ((sign(factors[v, 1]) < 
+                    0) + 1))
+            }
+        }
+    }
+    for (f in gf:num.factors) {
+        if (pc) {
+            fact.rect[[f]] <- dia.rect(left + middle, (num.factors + 
+                gf - f) * f.scale, colnames(factors)[f], xlim = limx, 
+                ylim = limy, cex = cex, rectCols = varCols[v], ...)
+        }
+        else {
+            fact.rect[[f]] <- dia.ellipse(left + middle, (num.factors + 
+                gf - f) * f.scale, colnames(factors)[f], xlim = limx, 
+                ylim = limy, e.size = e.size, cex = cex, ...)
+        }
+        for (v in 1:nvar) {
+            if (simple && (abs(factors[v, f]) == max(abs(factors[v, 
+                ]))) && (abs(factors[v, f]) > cut) | (!simple && 
+                (abs(factors[v, f]) > cut))) {
+                if (pc) {
+                  dia.arrow(to = fact.rect[[f]], from = var.rect[[v]]$right, 
+                    labels = round(factors[v, f], digits), col = ((sign(factors[v, 
+                      f]) < 0) + 1), lty = ((sign(factors[v, 
+                      f]) < 0) + 1), adj = f%%adj, cex = cex)
+                }
+                else {
+                  dia.arrow(from = fact.rect[[f]], to = var.rect[[v]]$right, 
+                    labels = round(factors[v, f], digits), col = ((sign(factors[v, 
+                      f]) < 0) + 1), lty = ((sign(factors[v, 
+                      f]) < 0) + 1), adj = f%%adj + 1, cex = cex)
+                }
+            }
+        }
+    }
+    if (!is.null(Phi) && (ncol(Phi) > 1)) {
+        for (i in 2:num.factors) {
+            for (j in 1:(i - 1)) {
+                if (abs(Phi[i, j]) > cut) {
+                  dia.curve(from = fact.rect[[j]]$right, to = fact.rect[[i]]$right, 
+                    labels = round(Phi[i, j], digits), scale = (i - 
+                      j), cex = cex, ...)
+                }
+            }
+        }
+    }
+    if (errors) {
+        for (v in 1:nvar) {
+            dia.self(location = var.rect[[v]], scale = 0.5, side = side)
+        }
+    }
+    if (!is.null(fe.results)) {
+        e.loadings <- fe.results$loadings
+        for (v in 1:n.evar) {
+            var.rect[[v]] <- dia.rect(x.max, top - v - max(0, 
+                nvar - n.evar)/2, rownames(e.loadings)[v], xlim = limx, 
+                ylim = limy, cex = cex, ...)
+            for (f in 1:num.factors) {
+                if (simple && (abs(e.loadings[v, f]) == max(abs(e.loadings[v, 
+                  ]))) && (abs(e.loadings[v, f]) > cut) | (!simple && 
+                  (abs(e.loadings[v, f]) > cut))) {
+                  dia.arrow(from = fact.rect[[f]], to = var.rect[[v]]$left, 
+                    labels = round(e.loadings[v, f], digits), 
+                    col = ((sign(e.loadings[v, f]) < 0) + 1), 
+                    lty = ((sign(e.loadings[v, f]) < 0) + 1), 
+                    adj = f%%adj + 1)
+                }
+            }
+        }
+    }
+}
+```
+
+Plot factor loadings.
+```{r, echo = T, eval = F}
+facLoad <- readRDS("CFA/facLoad.RDS")
+Names <- read.csv("EFA/NamesandColors.csv")
+
+Names <- Names[Names$NewName %in% row.names(facLoad) ,]
+srt.FA <- fa.sort(facLoad)
+Names <- Names[match(row.names(srt.FA), Names$NewName) ,]
+
+pdf("Figures/FactLoading.pdf", h = 13, w = 8)
+fa.diagram2(srt.FA, varCols = as.character(Names$Color), sort = T)
+dev.off()
+```
+
+### Figure 1
+Function for plotting.
+```{r, echo = T, eval = F}
+library(reshape2)
+
+plotFacDia <- function(factorLoadings = NULL, EdgeLabSize = NULL, ArrowLength = NULL, 
+                       LayoutType = NULL, Circ = NULL, NodeSize = NULL, EdgeWidth = NULL,
+                       EdgePad = NULL, LabDodge = NULL){
+  require(tidygraph)
+  require(ggraph)
+  
+  Nodes <- data.frame(id = 1:length(unique(c(factorLoadings$from, factorLoadings$to))),
+                      labels = unique(c(factorLoadings$from, factorLoadings$to)))
+  #Edge list
+  Edges <- factorLoadings
+  for(i in 1:length(unique(Edges$from))){
+    tmp <- unique(Edges$from)[i]
+    Edges$from[which(Edges$from == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+  for(i in 1:length(unique(Edges$to))){
+    tmp <- unique(Edges$to)[i]
+    Edges$to[which(Edges$to == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+  tmp_grph <- tbl_graph(nodes = Nodes, edges = Edges)
+  
+  netgraph <- ggraph(tmp_grph, layout = LayoutType, circular = Circ) +
+    #geom_node_point(size = 8, aes(fill = factor(labels)), colour = "grey10") +
+    geom_edge_link(aes(label = round(load, 2),
+                       start_cap = label_rect(from, padding = 
+                                                margin(t = EdgePad[1], r = EdgePad[2], 
+                                                       b = EdgePad[3], l = EdgePad[4], 
+                                                       unit = "in")),
+                       end_cap = label_rect(to, padding = 
+                                              margin(t = EdgePad[1], r = EdgePad[2],
+                                                     b = EdgePad[3], l = EdgePad[4],
+                                                     unit = "in"))), 
+                   alpha = 0.8,
+                   width = EdgeWidth,
+                   angle_calc = 'along',
+                   label_dodge = unit(LabDodge, 'in'), 
+                   arrow = arrow(length = unit(ArrowLength, 'in')),
+                   label_size = EdgeLabSize) + 
+    scale_edge_width(range = c(0.2, 1)) +
+    geom_node_text(aes(label = labels), size = NodeSize, repel = F) +
+    labs(edge_width = "Lat Facs") +
+    theme_graph(base_family = 'Helvetica')
+  
+  print(netgraph)
+}
+```
+
+```{r, echo = T, eval = F}
+facLoad <- readRDS("CFA/facLoad.RDS")
+
+facLoad <- melt(facLoad)
+colnames(facLoad) <- c("to", "from", "load")
+facLoad <- facLoad[facLoad$load != 0 ,]
+
+#Replace with short names
+NodeNames <- read.csv("CFA/NodeNames.csv")
+sum(NodeNames$NodeName == facLoad$to) == length(unique(facLoad$to))
+facLoad$to <- NodeNames$NewName
+facLoad$to <- as.character(facLoad$to)
+facLoad$from <- as.character(facLoad$from)
+
+igraph_layouts <- c('star', 'circle', 'gem', 'dh', 'graphopt', 
+                    'grid', 'mds', 'randomly', 'fr', 'kk', 
+                    'drl', 'lgl')
+
+pdf("~/Desktop/foo.pdf", h = 3.2, w = 3.2)
+plotFacDia(factorLoadings = facLoad, ArrowLength = 0.05, EdgeLabSize = 1, 
+           LayoutType = igraph_layouts[10], Circ = F, NodeSize = 1, EdgeWidth = 0.25, 
+           EdgePad = c(0.01, 0.02, 0.01, 0.02), LabDodge = 0.025 )
+dev.off()
+```
+
+## Generate plot for each factor
+
+Get Lat and Long
+```{r, echo = T, eval = F}
+rm(list = ls())
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+meta <- phenoclim[1:7]
+clim <- phenoclim[8:212]
+pheno <- phenoclim[213:ncol(phenoclim)]
+
+row.names(clim) <- phenoclim$id
+row.names(pheno) <- phenoclim$id
+
+#Filter out phenotypes with a lot of missing data
+missing.freq.pheno <- apply(pheno, 2, function(x){ sum(is.na(x)) / length(x) })
+
+length(missing.freq.pheno[missing.freq.pheno < 0.75]) #eight phenotypes
+pheno <- pheno[, missing.freq.pheno < 0.75]
+
+
+#Filter out phenotypes with a lot of missing phenotype data
+missing.freq.acc <- apply(pheno, 1, function(x){ sum(is.na(x)) / length(x) })
+missing.Indx <- missing.freq.acc[missing.freq.acc >= 0.8] #153 accessions
+length(missing.Indx)
+
+pheno <- pheno[- missing.Indx ,]
+clim <- clim[- missing.Indx ,]
+meta <- meta[-missing.Indx ,]
+
+#write.table(pheno, "/Volumes/ExtHD/ArabidPheno/pheno_clean.txt", sep = " ", col.names = T, row.names = F, quote = F)
+#write.table(clim, "/Volumes/ExtHD/ArabidPheno/clim_clean.txt", sep = " ", col.names = T, row.names = F, quote = F)
+```
+
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(wesanderson)
+
+facScores <- readRDS("CFA/factor.scores.RDS")
+sum(row.names(facScores) == row.names(pheno))
+sum(row.names(facScores) == row.names(clim))
+
+facLocs <- data.frame(lat = meta$lat, long = meta$lng, facScores)
+phenoLocs <- data.frame(lat = meta$lat, long = meta$lng, pheno)
+
+pal <- wes_palette("Zissou1", 100, type = "continuous")
+mapWorld <- borders("world", colour="white", fill="white")
+
+
+
+for (i in 1:ncol(facScores)){
+  pdf(paste0("Figures/WorldMap_MR", i ,".pdf"), h = 3, w = 6)
+  MR <- paste0("MR", i)
+  
+  tmp.dat <- na.omit(facLocs[c("lat", "long", MR)])
+  
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp.dat,
+                        aes(x = long, y = lat, color = get(MR)), shape = 19, size = 0.1,
+                        alpha = 1) +
+    scale_colour_gradientn(colors = pal) +
+    coord_cartesian(xlim = c(floor(min(facLocs$long)), ceiling(max(facLocs$long))), 
+                  ylim = c(floor(min(facLocs$lat)), ceiling(max(facLocs$lat)))) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  
+  print(mp)
+  
+  dev.off()
+}
+```
+
+generate plot for each phenotype
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(wesanderson)
+
+pal <- wes_palette("Zissou1", 100, type = "continuous")
+mapWorld <- borders("world", colour="white", fill="white")
+
+
+
+for (i in 3:ncol(phenoLocs)){
+  pdf(paste0("Figures/WorldMap_", colnames(phenoLocs)[i] ,".pdf"), h = 3, w = 6)
+  tmp <- na.omit(data.frame(long = phenoLocs$long, lat = phenoLocs$lat, Y = phenoLocs[,i]))
+  
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp,
+                        aes(x = long, y = lat, color = Y), shape = 19, size = 0.1,
+                        alpha = 1) +
+    scale_colour_gradientn(colors = pal) +
+    coord_cartesian(xlim = c(floor(min(tmp$long)), ceiling(max(tmp$long))), 
+                  ylim = c(floor(min(tmp$lat)), ceiling(max(tmp$lat)))) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  
+  print(mp)
+  
+  dev.off()
+}
+```
+
+generate plot for each manifest variable
+```{r, echo = T, eval = F}
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+sc.clim <- readRDS("EFA/sc.clim_7-31.rds")
+
+meta <- phenoclim[1:7]
+clim <- phenoclim[8:212]
+pheno <- phenoclim[213:ncol(phenoclim)]
+
+row.names(clim) <- phenoclim$id
+row.names(pheno) <- phenoclim$id
+
+#Filter out phenotypes with a lot of missing data
+missing.freq.pheno <- apply(pheno, 2, function(x){ sum(is.na(x)) / length(x) })
+
+length(missing.freq.pheno[missing.freq.pheno < 0.75]) #eight phenotypes
+pheno <- pheno[, missing.freq.pheno < 0.75]
+
+
+#Filter out phenotypes with a lot of missing phenotype data
+missing.freq.acc <- apply(pheno, 1, function(x){ sum(is.na(x)) / length(x) })
+missing.Indx <- missing.freq.acc[missing.freq.acc >= 0.8] #153 accessions
+length(missing.Indx)
+
+pheno <- pheno[- missing.Indx ,]
+clim <- clim[- missing.Indx ,]
+meta <- meta[-missing.Indx ,]
+
+sc.clim <- cbind(meta[,1:2], sc.clim)
+row.names(sc.clim) <- meta$id
+```
+
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(wesanderson)
+
+pal <- wes_palette("Zissou1", 100, type = "continuous")
+mapWorld <- borders("world", colour="white", fill="white")
+
+for (i in 3:ncol(sc.clim)){
+  pdf(paste0("Figures/Manifest/WorldMap_", 
+             colnames(sc.clim)[i] ,".pdf"), h = 3, w = 6)
+  
+  tmp.dat <- na.omit(sc.clim[c(1, 2, i)])
+  
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp.dat,
+                        aes(x = lng, y = lat, color = get(colnames(sc.clim[i]))), shape = 19, size = 0.1,
+                        alpha = 1) +
+    scale_colour_gradientn(colors = pal) +
+    coord_cartesian(xlim = c(floor(min(facLocs$long)), ceiling(max(facLocs$long))), 
+                  ylim = c(floor(min(facLocs$lat)), ceiling(max(facLocs$lat)))) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  
+  print(mp)
+  
+  dev.off()
+}
+```

@@ -1,0 +1,213 @@
+---
+title: "Supplemental Figures"
+author: "Malachy Campbell"
+date: "12/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Fig S1: Geographic locations for all 1,130 Accessions
+
+```{r, echo = T, eval = F}
+# Plot BVs - Europe only
+library(ggmap)
+library(maptools)
+library(maps)
+library(viridis)
+library(wesanderson)
+rm(list = ls())
+
+meta <- read.csv("phenoClim/phenoclim.csv")[1:3]
+
+mapWorld <- borders("world", colour="white", fill="white")
+
+pdf("Figures/FigS1.pdf", h = 1.5, w = 6)
+  
+mp <- ggplot() + mapWorld
+mp <- mp + geom_point(data = meta,
+                      aes(x = lng, y = lat), 
+                      shape = 19, size = 0.25, stroke = 0.1,
+                      color = wes_palette("Zissou1")[2], alpha = 0.75) +
+    scale_colour_gradientn(colors = pal) +
+    coord_fixed(xlim = c(floor(min(meta$lng)), ceiling(max(meta$lng))), 
+                ylim = c(floor(min(meta$lat)), ceiling(max(meta$lat))),
+                ratio = 1/cos(pi*(floor(min(meta$lat)) - 
+                                    (floor(min(meta$lat))))/180)) +
+    geom_jitter() +
+    xlab('Long.') +
+    ylab('Lat.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+
+print(mp)
+  
+dev.off()
+````
+
+# Fig S2: Correlation heatmap for all continuous environmental variables
+```{r, echo = T, eval = F}
+library(pheatmap)
+library(viridis)
+rm(list = ls())
+
+sc.clim <- readRDS("EFA/sc.clim_7-31.rds")
+clim.cor <- cor(sc.clim, use = "complete.obs", method = "spearman")
+
+HMcolors <- viridis(1000)
+pheatmap(clim.cor,
+         color = HMcolors,
+         border_color = NA,
+         cellwidth = 4,
+         cellheight = 4,
+         fontsize = 3.5,
+         scale = "none",
+         cluster_rows = T,
+         cluster_cols = T,
+         legend = T,
+         display_numbers = F,
+         number_format = "%.2f",
+         number_color = "black",
+         fontsize_number = 3.5,
+         breaks = seq(-1, 1, length.out = 1000),
+         filename = "Figures/FigS2.pdf",
+         width = 6.1,
+         height = 5.2,
+         show_rownames = T,
+         show_colnames = T,
+         margins = c(1,1))
+```
+
+# Fig S3: FT values at locations
+```{r, echo = T, eval = F}
+# Raw Phenos
+library(ggmap)
+library(maptools)
+library(maps)
+library(viridis)
+rm(list = ls())
+
+Ys <- as.data.frame(readRDS("MTM/Ys.rds"))[1:10]
+Plast <- readRDS("FW/Plast.rds")
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+Ys <- merge(Ys, Plast, by.x = 0, by.y = "Acc", all = F)
+row.names(Ys) <- Ys$Row.names
+Ys$Row.names <- NULL
+
+meta <- phenoclim[1:3]
+meta <- meta[meta$id %in% row.names(Ys) ,]
+meta <- meta[match(row.names(Ys), meta$id) ,]
+Ys_ll <- cbind(meta[,1:2], Ys[,12])
+colnames(Ys_ll)[3] <- "FT"
+
+pal <- magma(1000)
+mapWorld <- borders("world", colour="white", fill="white")
+
+pdf("Figures/FigS3.pdf", h = 3, w = 3.2)
+  
+mp <- ggplot() + mapWorld
+mp <- mp + geom_point(data = Ys_ll,
+                      aes(x = lng, y = lat, color = FT),
+                      shape = 16, size = 0.5, stroke = 0,
+                      alpha = 0.75) +
+  scale_colour_gradientn(colors = pal) +
+  coord_fixed(xlim = c(-12.5, 30),
+              ylim = c(32.5, 65), 
+              ratio = 1/cos(pi*(32.5 - (-12.5))/180) ) +
+  geom_jitter() +
+  xlab('Long.') +
+  ylab('Lat.') + 
+  theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+  theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+  theme(axis.text.x = element_text(size = 6, angle = 00)) +
+  theme(axis.text.y = element_text(size = 6, angle = 00)) +
+  theme(legend.position="right") +
+  theme(legend.text = element_text(size = 6)) +
+  theme(legend.title = element_blank()) +
+  theme(legend.key.height = unit(1*0.3, "in"), legend.key.width = unit(0.25*0.3, "in"))
+  mp <- mp + geom_point(aes(x = c(-3.83535, 9.042449), y = c(40.40805, 48.545809)), 
+                        shape = 4, col = "red", size = 0.5, stroke = 0.25)
+  
+print(mp)
+  
+dev.off()
+```
+
+# File S2: Loadings for EFA
+```{r, echo = T, eval = F}
+fitfa <- readRDS("EFA/EFA_fit_r0.80.rds")
+Names <- read.csv("EFA/NamesandColors.csv")
+
+EFAload <- as.data.frame(unclass(fitfa$loadings))
+
+write.csv(EFAload, "SuppFiles/FileS1.csv")
+```
+
+# File S3: Loadings for CFA and interpretation
+```{r, echo = T, eval = F}
+rm(list = ls())
+library(reshape2)
+
+facLoad <- readRDS("CFA/facLoad.RDS")
+facLoad <- melt(facLoad)
+facLoad$value[facLoad$value == 0] <- NA
+facLoad <- facLoad[!is.na(facLoad$value) ,]
+write.csv(facLoad, "SuppFiles/FileS2.csv", row.names = F)
+```
+
+
+# Get day length and temperature at each common garden site
+```{r, echo = T, eval = F}
+rm(list = ls())
+library(rnoaa)
+library(dplyr)
+library(lubridate)
+
+lat.lngs <- rbind(c(-3.835350, 40.40805),
+                  c(9.042449, 48.54581))
+times15.16 <- seq(as.Date("2015-10-01"), as.Date("2016-06-30"), by="days")
+
+Min <- NULL
+Max <- NULL
+meanDay <- NULL
+for(j in 1:2){
+  foo <- lat.lngs[j,]
+  tmp <- isd_stations_search(lon = foo[1], lat = foo[2], radius = 10)
+  dat <- isd(usaf = tmp$usaf[1], wban = tmp$wban[1], year = 2015, force = T)
+  dat <- as.data.frame(dat) 
+  for (i in 1:length(times15)){
+    tmp.dat <- dat[dat$date %in% gsub("-", "", times15[i]) ,]
+    tmp.dat <- tmp.dat[, c("time", "temperature")]
+    tmp.dat$time <- as.numeric(tmp.dat$time)
+    tmp.dat$temperature <- as.numeric(tmp.dat$temperature)
+    Min <- c(Min, min(tmp.dat$temperature/10, na.rm = T))
+    Max <- c(Max, max(tmp.dat$temperature/10, na.rm = T))
+    meanDay <- c(meanDay,
+                 mean(tmp.dat$temperature[(tmp.dat$time >= 600) & (tmp.dat$time <= 1800)], na.rm = T))
+  }
+}
+
+library(geosphere)
+Res <- NULL
+for(i in 1:2){
+  tmp.dl <- NULL
+  for(j in 1:length(times15.16)){
+    tmp.dl <- c(tmp.dl,
+                daylength(lat = lat.lngs[i,][1], 
+                          doy = as.numeric(strftime(times15.16[j], format = "%j"))))
+  }
+  Res <- rbind(Res,
+               data.frame(Lat = lat.lngs[i,][1], Date = times15.16, DL = tmp.dl))
+}
+
+plot(Res[Res$Lat < -3 ,]$DL, type = "l", ylim = c(min(Res$DL), max(Res$DL)))
+lines(Res[Res$Lat > -3 ,]$DL)
+```

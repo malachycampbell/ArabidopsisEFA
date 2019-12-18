@@ -1,0 +1,218 @@
+---
+title: "Bayesian Network"
+author: "Malachy Campbell"
+date: "12/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Model selection
+```{r, echo = T, eval = F}
+rm(list = ls())
+library(bnlearn)
+library(xtable)
+
+BVs <- as.data.frame(readRDS("MTM/BVs_chol.rds"))
+
+##HC
+set.seed(08)
+boot_hc_all <- boot.strength(BVs, algorithm = "hc", R = 500)
+boot_hc_all_0.85 <- boot_hc_all[(boot_hc_all$strength > 0.85 & boot_hc_all$direction > 0.5) ,] 
+ave_model_hc_all <- averaged.network(boot_hc_all, threshold = 0.85)
+
+##Tabu
+set.seed(08)
+boot_tabu_all <- boot.strength(BVs, algorithm = "tabu", R = 500)
+boot_tabu_all_0.85 <- boot_tabu_all[(boot_tabu_all$strength > 0.85 & boot_tabu_all$direction > 0.5) ,] 
+ave_model_tabu_all <- averaged.network(boot_tabu_all, threshold = 0.85)
+
+##MMHC
+set.seed(08)
+boot_mmhc_all <- boot.strength(BVs, algorithm = "mmhc", R = 500) #for the mmhc algorithm
+boot_mmhc_all_0.85 <- boot_mmhc_all[(boot_mmhc_all$strength > 0.85 & boot_mmhc_all$direction > 0.5) ,] 
+ave_model_mmhc_all <- averaged.network(boot_mmhc_all, threshold = 0.85)
+
+##rsmax2 - partially directed
+set.seed(08)
+boot_rs_all <- boot.strength(BVs, algorithm = "rsmax2", R = 500)
+boot_rs_all_0.85 <- boot_rs_all[(boot_rs_all$strength > 0.85 & boot_rs_all$direction > 0.5) ,] 
+ave_model_rs_all <- averaged.network(boot_rs_all, threshold = 0.85)
+
+#BIC/BIC.g results
+all_nets <- data.frame(Algo = c("HC", "TABU", "MMHC", "rsmax2"),
+                       BICg = c(score(x = ave_model_hc_all, data = BVs, type = "bic-g"),
+                                score(x = ave_model_tabu_all, data = BVs, type = "bic-g"),
+                                score(x = ave_model_mmhc_all, data = BVs, type = "bic-g"),
+                                score(x = ave_model_rs_all, data = BVs, type = "bic-g")),
+                       BIC = c(BIC(ave_model_hc_all, data = BVs),
+                               BIC(ave_model_tabu_all, data = BVs),
+                               BIC(ave_model_mmhc_all, data = BVs),
+                               BIC(ave_model_rs_all, data = BVs)))
+
+xtable(all_nets) #HC or TABU is best
+
+all.res.thresh <- list(HC = boot_hc_all_0.85,
+                       Tabu = boot_tabu_all_0.85,
+                       MMHC = boot_mmhc_all_0.85,
+                       rsmax = boot_rs_all_0.85)
+
+saveRDS(all_nets, "BN/BN_all.rds")
+
+saveRDS(all.res.thresh, "BN/BN_thresh_all.rds")
+```
+
+## Plot network
+Function for plotting the network.
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+plotNet <- function(ThreshNet = NULL, PhenoOfInt = NULL, MB = NULL, EdgeLabSize = NULL,
+                    LayoutType = NULL, Circ = NULL, EdgePad = NULL, LabDodge = NULL, 
+                    ArrowLength = NULL, NodeSize = NULL, EdgeWidth = NULL, plotMarg = NULL,
+                    MaxIter = NULL, Alpha = NULL, EdgeCol = NULL){
+  require(tidygraph)
+  require(ggraph)
+  
+  if(MB == T){
+    #find parents
+    Parents <- ThreshNet[ThreshNet$to %in% PhenoOfInt ,]
+    Children <- ThreshNet[ThreshNet$from %in% PhenoOfInt ,]
+    InLaws <- ThreshNet[ThreshNet$to %in% Children$to ,]
+    
+    ThreshNet <- unique(rbind(Parents, Children, InLaws))
+    
+    Nodes <- data.frame(id = 1:length(unique(c(ThreshNet$from, ThreshNet$to))),
+                        labels = unique(c(ThreshNet$from, ThreshNet$to)))
+    
+    #Edge list
+    Edges <- ThreshNet
+    for(i in 1:length(unique(Edges$from))){
+      tmp <- unique(Edges$from)[i]
+      Edges$from[which(Edges$from == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+    
+    for(i in 1:length(unique(Edges$to))){
+      tmp <- unique(Edges$to)[i]
+      Edges$to[which(Edges$to == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+    
+    tmp_grph <- tbl_graph(nodes = Nodes, edges = Edges)
+  }else{
+    Nodes <- data.frame(id = 1:length(unique(c(ThreshNet$from, ThreshNet$to))),
+                        labels = unique(c(ThreshNet$from, ThreshNet$to)))
+    #Edge list
+    Edges <- ThreshNet
+    for(i in 1:length(unique(Edges$from))){
+      tmp <- unique(Edges$from)[i]
+      Edges$from[which(Edges$from == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+    for(i in 1:length(unique(Edges$to))){
+      tmp <- unique(Edges$to)[i]
+      Edges$to[which(Edges$to == tmp)] <- Nodes$id[Nodes$labels %in% tmp ]
+    }
+    
+    tmp_grph <- tbl_graph(nodes = Nodes, edges = Edges)
+  }
+  
+  #set_graph_style(plot_margin = margin(plotMarg[1], plotMarg[2], plotMarg[3], plotMarg[4]))
+  if(is.null(MaxIter)){
+    netgraph <- ggraph(tmp_grph, layout = LayoutType, circular = Circ)
+  }else{
+    netgraph <- ggraph(tmp_grph, layout = LayoutType, circular = Circ, maxiter = MaxIter)
+  }
+  netgraph <- netgraph +
+    #geom_node_point(size = 8, aes(fill = factor(labels)), colour = "grey10") +
+    geom_edge_fan(aes(
+      start_cap = label_rect(from, padding = 
+                               margin(t = EdgePad[1], r = EdgePad[2], 
+                                      b = EdgePad[3], l = EdgePad[4], 
+                                      unit = "in")),
+      end_cap = label_rect(to, padding = 
+                             margin(t = EdgePad[1], r = EdgePad[2],
+                                    b = EdgePad[3], l = EdgePad[4],
+                                    unit = "in"))), 
+      alpha = Alpha,
+      width = EdgeWidth,
+      angle_calc = 'along',
+      label_dodge = unit(LabDodge, 'in'), 
+      arrow = arrow(length = unit(ArrowLength, 'in')),
+      label_size = EdgeLabSize,
+      color = EdgeCol) + 
+    scale_edge_width(range = c(0.2, 1)) +
+    geom_node_text(aes(label = labels), size = NodeSize, repel = F, fontface = "bold") +
+    labs(edge_width = "Lat Facs") +
+    theme_graph(base_family = 'Helvetica')
+  
+  print(netgraph)
+}
+```
+
+Plot network.
+```{r, echo = T, eval = F}
+#####
+tmp <- readRDS("BN/BN_thresh_all.rds")[[2]]
+#tmp$from[tmp$from == "Germination_time"] <- "GT"; tmp$to[tmp$to == "Germination_time"] <- "GT"
+#tmp$from[tmp$from == "Flowering_time"] <- "GT"; tmp$to[tmp$to == "Flowering_time"] <- "FT"
+#tmp$from[tmp$from == "Fitness"] <- "GT"; tmp$to[tmp$to == "Fitness"] <- "Fit"
+
+igraph_layouts <- c('star', 'circle', 'gem', 'dh', 'graphopt', 
+                    'grid', 'mds', 'randomly', 'fr', 'kk', 
+                    'drl', 'lgl')
+
+pdf("Figures/Fig3.pdf", h = 3.2, w = 3.2 , useDingbats = F, pointsize = 10)
+par(mar=c(3,3,1.5,1.5), mgp=c(1.8,0.5,0))
+
+plotNet(ThreshNet = tmp, PhenoOfInt = c("GT", "Fit", "FT"), 
+        MB = T, ArrowLength = 0.05, EdgeLabSize = 0.75, LayoutType = igraph_layouts[12],
+        Circ = F, NodeSize = 1.5, EdgeWidth = 0.25, EdgePad = c(0.01, 0.02, 0.01, 0.02),
+        LabDodge = 0.025, plotMarg = c(0.1, 0.1, 0.1, 0.1), MaxIter = 10000, Alpha = 1, 
+        EdgeCol = "grey90")
+
+dev.off()
+
+pdf("Figures/Fig3_full.pdf", h = 3.2, w = 3.2 , useDingbats = F, pointsize = 10)
+par(mar=c(3,3,1.5,1.5), mgp=c(1.8,0.5,0))
+
+plotNet(ThreshNet = tmp, PhenoOfInt = NULL, 
+        MB = F, ArrowLength = 0.05, EdgeLabSize = 0.75, LayoutType = igraph_layouts[4],
+        Circ = F, NodeSize = 1.5, EdgeWidth = 0.25, EdgePad = c(0.01, 0.02, 0.01, 0.02),
+        LabDodge = 0.025, plotMarg = c(0.1, 0.1, 0.1, 0.1), Alpha = 1, MaxIter = NULL, 
+        EdgeCol = "grey90")
+
+dev.off()
+```
+
+
+## Descriptive stats for network
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+tmp <- readRDS("BN/BN_thresh_all.rds")[[2]]
+tmp$from[tmp$from == "Germination_time"] <- "GT"; tmp$to[tmp$to == "Germination_time"] <- "GT"
+tmp$from[tmp$from == "Flowering_time"] <- "GT"; tmp$to[tmp$to == "Flowering_time"] <- "FT"
+tmp$from[tmp$from == "Fitness"] <- "GT"; tmp$to[tmp$to == "Fitness"] <- "Fit"
+
+table(tmp$from)
+#GT MR10  MR2  MR3  MR4  MR5  MR6  MR7  MR8  MR9 
+#2    3    2    2    3    4    3    3    3    4 
+# GT is the only empirical phenotype to exert dependence
+table(tmp$to)
+#Fit   FT   GT  MR1 MR10  MR3  MR4  MR6 
+#7    3    3    7    3    2    1    3 
+#All edges for Fit were leading to FT from other nodes. Of the six edges leading to Fit all were coming from environmental factors, with the exception of the edge leading from GT to Fit.
+# Percent of nodes that describe relationships from environmental variables to empirical phenotypes = 41.38%
+# Percent of nodes that describe relationships from empirical phenotypes to environmental variables = 3.45%
+# Percent of nodes that describe relationships from empirical phenotypes to empirical phenotypes = 3.45%
+#total number of edges nrow(tmp) = 29
+nrow(tmp)
+fromEnv <- tmp[grep("MR*", tmp$from) ,]
+fromEmp <- tmp[grep("MR*", tmp$from, invert = T) ,]
+nrow(fromEnv[grep("MR*", fromEnv$to, invert = T),]) #12
+nrow(fromEnv[grep("MR*", fromEnv$to, invert = F),]) #15
+nrow(fromEmp[grep("MR*", fromEmp$to, invert = F),]) #1
+nrow(fromEmp[grep("MR*", fromEmp$to, invert = T),]) #1
+nrow(tmp[grep("MR*", tmp$from, ) & grep("MR*", tmp$to, invert = T),])
+```

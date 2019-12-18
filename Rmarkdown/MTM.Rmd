@@ -1,0 +1,250 @@
+---
+title: "Predicting Breeding Values using a Multi-trait model"
+author: "Malachy Campbell"
+date: "12/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Fitting the multitrait model (MTM).
+```{r, echo = T, eval = F}
+#######
+# MTM #
+#######
+rm(list = ls())
+library(MTM)
+
+G <- readRDS("MTM/G.rds")
+Ys <- as.data.frame(readRDS("MTM/Ys.rds"))[1:10]
+Plast <- readRDS("FW/Plast.rds")
+
+Ys <- merge(Ys, Plast, by.x = 0, by.y = "Acc", all = F)
+row.names(Ys) <- Ys$Row.names
+Ys$Row.names <- NULL
+
+G <- G[, colnames(G) %in% row.names(Ys)]
+G <- G[row.names(G) %in% row.names(Ys) ,]
+G <- G[, match(row.names(Ys), colnames(G))]
+G <- G[match(row.names(Ys), row.names(G)) ,]
+sum(row.names(G) == row.names(Ys)); sum(colnames(G) == row.names(Ys))
+
+nTraits <- ncol(Ys)
+
+fm_us <- MTM(Y = Ys,
+             K = list(list(K = G, COV = list(type = 'UN', df0 = nTraits, S0 = diag(nTraits)))),
+             resCov = list(type = 'UN', S0 = diag(nTraits), df0 = nTraits),
+             nIter = 10000,
+             burnIn = 2000,
+             thin = 5,
+             saveAt = 'MTM/fm_us')
+fm_us$DIC
+#LL: -2396.691-2396.691; LL@PostMean: -1479.937; DIC: 6626.888; pD: 1833.507
+
+## Trace plots
+#G_us <- read.table("~/Documents/Dropbox/Work/ArabidopsisEFA/MTM/MTM_usG_1.dat", skip = 2401)
+#dim(G_us)
+#plot(G_us[, 1], type = "o", cex = 0.5, col = 4)  # genomic variance 1st trait.
+#plot(G_us[, 2], type = "o", cex = 0.5, col = 4)  # genomic co-variance trait 1 and 2.
+#plot(G_us[, 4], type = "o", cex = 0.5, col = 4)  # genomic variance trait 2.
+#plot(G_us[, 6], type = "o", cex = 0.5, col = 4)  # genomic co-variance trait 2 and 3.
+
+saveRDS(fm_us, "MTM/fm_us.rds")
+```
+
+## Plot BVs for world
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(viridis)
+rm(list = ls())
+
+fm_us <- readRDS("MTM/fm_us.rds")
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+BVs <- fm_us$K[[1]]$U
+colnames(BVs) <- colnames(fm_us$YHat)
+row.names(BVs) <- row.names(fm_us$YHat)
+
+meta <- phenoclim[1:3]
+meta <- meta[meta$id %in% row.names(BVs) ,]
+meta <- meta[match(row.names(BVs), meta$id) ,]
+BVs_ll <- cbind(meta[,1:2], BVs)
+
+pal <- magma(1000)
+mapWorld <- borders("world", colour="white", fill="white")
+
+for (i in 3:ncol(BVs_ll)){
+  pdf(paste0("Figures/MTM/WorldMap_BVs_", 
+             colnames(BVs_ll)[i] ,".pdf"), h = 3, w = 6)
+  
+  tmp.dat <- na.omit(BVs_ll[c(1, 2, i)])
+  
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp.dat,
+                        aes(x = lng, y = lat, color = get(colnames(BVs_ll[i]))), 
+                        shape = 16, size = 0.5, stroke = 0,
+                        alpha = 0.75) +
+    scale_colour_gradientn(colors = pal) +
+    coord_cartesian(xlim = c(floor(min(tmp.dat$lng)), ceiling(max(tmp.dat$lng))), 
+                    ylim = c(floor(min(tmp.dat$lat)), ceiling(max(tmp.dat$lat)))) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  
+  print(mp)
+  
+  dev.off()
+}
+```
+
+## Plot BVs - Europe only
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(viridis)
+rm(list = ls())
+
+fm_us <- readRDS("MTM/fm_us.rds")
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+BVs <- fm_us$K[[1]]$U
+colnames(BVs) <- colnames(fm_us$YHat)
+row.names(BVs) <- row.names(fm_us$YHat)
+
+meta <- phenoclim[1:3]
+meta <- meta[meta$id %in% row.names(BVs) ,]
+meta <- meta[match(row.names(BVs), meta$id) ,]
+BVs_ll <- cbind(meta[,1:2], BVs)
+
+pal <- magma(1000)
+mapWorld <- borders("world", colour="white", fill="white")
+
+for (i in 3:ncol(BVs_ll)){
+  pdf(paste0("Figures/MTM/WorldMap_BVsEurope_", 
+             colnames(BVs_ll)[i] ,".pdf"), h = 3, w = 3)
+  
+  tmp.dat <- na.omit(BVs_ll[c(1, 2, i)])
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp.dat,
+                        aes(x = lng, y = lat, color = get(colnames(BVs_ll[i]))), 
+                        shape = 16, size = 0.3, stroke = 0,
+                        alpha = 0.75) +
+    scale_colour_gradientn(colors = pal) +
+    coord_fixed(xlim = c(-12.5, 30),
+                ylim = c(32.5, 65), 
+                ratio = 1/cos(pi*(32.5 - (-12.5))/180) ) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  
+  mp <- mp + geom_point(aes(x = c(-3.83535, 9.042449), y = c(40.40805, 48.545809)), 
+                        shape = 4, col = "red", size = 0.5, stroke = 0.25)
+  
+  print(mp)
+  
+  dev.off()
+}
+```
+
+## Plot Raw Phenotypes
+```{r, echo = T, eval = F}
+library(ggmap)
+library(maptools)
+library(maps)
+library(viridis)
+rm(list = ls())
+
+Ys <- as.data.frame(readRDS("MTM/Ys.rds"))[1:10]
+Plast <- readRDS("FW/Plast.rds")
+phenoclim <- read.csv("phenoClim/phenoclim.csv")
+
+Ys <- merge(Ys, Plast, by.x = 0, by.y = "Acc", all = F)
+row.names(Ys) <- Ys$Row.names
+Ys$Row.names <- NULL
+
+meta <- phenoclim[1:3]
+meta <- meta[meta$id %in% row.names(Ys) ,]
+meta <- meta[match(row.names(Ys), meta$id) ,]
+Ys_ll <- cbind(meta[,1:2], Ys)
+
+pal <- magma(1000)
+mapWorld <- borders("world", colour="white", fill="white")
+
+for (i in 3:ncol(Ys_ll)){
+  pdf(paste0("Figures/MTM/WorldMap_Ys_Europe_", 
+             colnames(Ys_ll)[i] ,".pdf"), h = 3, w = 3)
+  
+  tmp.dat <- na.omit(Ys_ll[c(1, 2, i)])
+  
+  mp <- ggplot() + mapWorld
+  mp <- mp + geom_point(data = tmp.dat,
+                        aes(x = lng, y = lat, color = get(colnames(Ys_ll[i]))), 
+                        shape = 16, size = 0.3, stroke = 0,
+                        alpha = 0.75) +
+    scale_colour_gradientn(colors = pal) +
+    coord_fixed(xlim = c(-12.5, 30),
+                ylim = c(32.5, 65), 
+                ratio = 1/cos(pi*(32.5 - (-12.5))/180) ) +
+    geom_jitter() +
+    xlab('Lat.') +
+    ylab('Long.') +
+    theme(axis.title.y = element_text(size = 8, angle = 90,face="bold")) + 
+    theme(axis.title.x = element_text(size = 8, angle = 00,face="bold")) +
+    theme(axis.text.x = element_text(size = 6, angle = 00)) +
+    theme(axis.text.y = element_text(size = 6, angle = 00)) +
+    theme(legend.position="bottom") +
+    theme(legend.text = element_text(size = 6)) +
+    theme(legend.title = element_blank())
+  mp <- mp + geom_point(aes(x = c(-3.83535, 9.042449), y = c(40.40805, 48.545809)), 
+                        shape = 4, col = "red", size = 0.5, stroke = 0.25)
+  print(mp)
+  
+  dev.off()
+}
+```
+
+## Cholesky decomposition of BVs
+Prior to running Bayesian Networking we need to make the breeding values (input for BN) to be independant. Here we perform Choloski decomposition of the GRM.
+```{r, echo = T, eval = F}
+rm(list = ls())
+
+G <- readRDS("MTM/G.rds")
+fm_us <- readRDS("MTM/fm_us.rds")
+BVs <- fm_us$K[[1]]$U
+row.names(BVs) <- row.names(fm_us$YHat)
+
+G <- G[row.names(G) %in% row.names(BVs) ,]
+G <- G[, colnames(G) %in% row.names(BVs)]
+G <- G[match(row.names(BVs), row.names(G)) ,]
+G <- G[, match(row.names(BVs), colnames(G))]
+
+nTraits <- ncol(BVs)
+nInds <- nrow(BVs)
+
+Linv <- solve(t(chol(G)))
+Minv <- kronecker(diag(nTraits), Linv)
+BVs <- c(as.matrix(BVs)) #turn the dataframe of genetic values to one long vector
+BVs_star <- matrix(Minv %*% BVs, nrow = nInds, ncol = nTraits) #These are our adjusted breeding values. This will just put them in a nice n x t matrix 
+
+colnames(BVs_star) <- colnames(fm_us$YHat)
+saveRDS(BVs_star, "MTM/BVs_chol.rds")
+```

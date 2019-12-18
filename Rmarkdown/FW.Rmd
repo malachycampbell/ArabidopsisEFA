@@ -1,0 +1,259 @@
+---
+title: "Finlay-Wilkinson"
+author: "Malachy Campbell"
+date: "09/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo = T, eval = F}
+library(FW)
+library(reshape2)
+library(wesanderson)
+library(latex2exp)
+
+moises <- read.csv("phenoClim/AccMeans.csv")
+
+moises.I <- moises[moises$indpop %in% "i" ,]
+moises.I$ENV <- paste0(moises.I$site, "_", moises.I$water)
+
+#Seeds and fruits have correlation of 1
+Trts <- c("Germination_time", "Flowering_time", "Fitness")
+
+Res <- NULL
+Yr <- NULL
+for (i in 1:length(Trts)){
+  tmpY <- na.omit(data.frame(Acc = moises.I$id, Env = moises.I$ENV, Y = moises.I[Trts[i]]))
+  colnames(tmpY)[3] <- "Y"
+  lm1 <- FW(y = tmpY$Y, VAR = tmpY$Acc, ENV = tmpY$Env, method = "OLS")
+  Yrx <- data.frame(Acc = tmpY$Acc, Env = tmpY$Env, Tr = Trts[i], yHat = lm1$yhat)
+  Yrx <- merge(Yrx, lm1$h, by.x = "Env", by.y = "row.names")
+  Yr <- rbind(Yr, Yrx)
+  
+  Res <- rbind(Res, 
+               data.frame(Acc = lm1$VARlevels, Trt = Trts[i], Plast = lm1$b, Acc = lm1$g))
+  saveRDS(lm1, paste0("FW/FW_", Trts[i], ".rds"))
+}
+
+Res <- dcast(Res, Acc ~ Trt, value.var = "Plast")
+
+Res <- data.frame(Acc = Res$Acc, 
+                  scale(as.matrix(Res[2:ncol(Res)]), center = T, scale = T))
+saveRDS(Yr, "FW/Yr.rds")
+saveRDS(Res, "FW/Plast.rds")
+```
+
+#Boxplots for each location-precipitation combination
+```{r, echo = T, eval = F}
+rm(list = ls())
+library(FW)
+library(reshape2)
+library(wesanderson)
+library(latex2exp)
+library(scales)
+
+Yr <- readRDS("FW/Yr.rds")
+Res <- readRDS("FW/Plast.rds")
+moises <- read.csv("phenoClim/AccMeans.csv")
+moises.I <- moises[moises$indpop %in% "i" ,]
+moises.I$ENV <- paste0(moises.I$site, "_", moises.I$water)
+Trts <- c("Germination_time", "Flowering_time", "Fitness")
+
+pdf("Figures/Fig2.pdf", h = 1.8*3, w = 2.1*2, useDingbats = F, pointsize = 10)
+par(mar=c(4,3.5,1.5,1.5), mgp=c(1.8,0.5,0))
+nf = layout(rbind(c(1,4), c(2,5), c(3,6)))
+
+COLS <- wes_palette("Royal2")[2:5]
+
+#########
+##Panel A
+boxplot(Germination_time ~ ENV, data = moises.I, 
+        col=COLS, ylab = "Days to germination", main=" ", axes = F, cex = 0.3, cex.lab = 1, xlab = "")
+
+axis(1, at = c(1,2,3,4), labels = FALSE, cex.axis = 0.75, las = 2)
+axis(2, cex.axis = 0.75)
+
+#All are values inside except temp because the values are nearly the same in and out
+Labels <- c(expression(M[H]), expression(M[L]), expression(T[H]), expression(T[L]))
+Temps <- c(8.5, 8.5, 5.6, 5.6)
+SWC <- c(27.8, 16.1, 24.6, 14.7)
+PAR <- c(45.7, 45.7, 30.9, 30.9)
+
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.13),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Labels, font = 3)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Temps, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = SWC, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = PAR, font = 1)
+text(x = 0.25, 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(Temp[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(SWC[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Germination_time,na.rm = T) - ((max(moises.I$Germination_time,na.rm = T) - min(moises.I$Germination_time,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(PAR[In]), font = 3)
+
+mtext("A", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+#########
+##Panel B
+boxplot(Flowering_time ~ ENV, data = moises.I, 
+        col=COLS, ylab = "Days to flower", main=" ", axes = F, cex = 0.3, cex.lab = 1, xlab = "")
+
+axis(1, at = c(1,2,3,4), labels = FALSE, cex.axis = 0.75, las = 2)
+axis(2, cex.axis = 0.75)
+
+#All are values inside except temp because the values are nearly the same in and out
+Labels <- c(expression(M[H]), expression(M[L]), expression(T[H]), expression(T[L]))
+Temps <- c(8.5, 8.5, 5.6, 5.6)
+SWC <- c(27.8, 16.1, 24.6, 14.7)
+PAR <- c(45.7, 45.7, 30.9, 30.9)
+
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.13),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Labels, font = 3)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Temps, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = SWC, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = PAR, font = 1)
+text(x = 0.25, 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(Temp[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(SWC[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Flowering_time,na.rm = T) - ((max(moises.I$Flowering_time,na.rm = T) - min(moises.I$Flowering_time,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(PAR[In]), font = 3)
+
+
+mtext("B", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+#########
+##Panel C
+boxplot(Fitness ~ ENV, data = moises.I, 
+        col=COLS, ylab = "Fitness", main=" ", axes = F, cex = 0.3, cex.lab = 1, xlab = "")
+
+axis(1, at = c(1,2,3,4), labels = FALSE, cex.axis = 0.75, las = 2)
+axis(2, cex.axis = 0.75)
+
+#All are values inside except temp because the values are nearly the same in and out
+Labels <- c(expression(M[H]), expression(M[L]), expression(T[H]), expression(T[L]))
+Temps <- c(8.5, 8.5, 5.6, 5.6)
+SWC <- c(27.8, 16.1, 24.6, 14.7)
+PAR <- c(45.7, 45.7, 30.9, 30.9)
+
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.13),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Labels, font = 3)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = Temps, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = SWC, font = 1)
+text(x = c(1,2,3,4), 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = PAR, font = 1)
+text(x = 0.25, 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.20),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(Temp[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.27),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(SWC[In]), font = 3)
+text(x = 0.25, 
+     y = min(moises.I$Fitness,na.rm = T) - ((max(moises.I$Fitness,na.rm = T) - min(moises.I$Fitness,na.rm = T))*0.34),
+     srt = 0, adj = 0.5, cex = 0.75, xpd = TRUE, labels = expression(PAR[In]), font = 3)
+
+mtext("C", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+########
+#Panel D
+colnames(Yr)[4:5] <- c("Y", "X")
+
+tmp <- Yr[Yr$Tr %in% Trts[1] ,]
+
+plot(tmp$X, tmp$Y, pch = '', xaxt = "n",
+     ylab = TeX('\\textit{\\hat{y}_{GT}}'), xlab = "Loc-Trt",
+     cex.axis = 0.75)
+
+Acc <- unique(tmp$Acc)
+for(j in 1:length(Acc)){
+  tmp2 <- tmp[tmp$Acc %in% Acc[j] ,]
+  lines(tmp2$X, tmp2$Y, col = alpha(wes_palette("Moonrise1")[3], 0.15))
+}
+
+points(tmp$X, tmp$Y, pch = 16, cex = 0.5, col = alpha(wes_palette("Moonrise1")[4], 0.15))
+unique(tmp[c(1,5)])[order(unique(tmp[c(1,5)]$X)) ,]
+axis(1, at = unique(tmp$X)[order(unique(tmp$X))], tick = T, 
+     labels = c(expression(T[H]), expression(M[L]), 
+                expression(T[L]), expression(M[H])),
+     cex.axis = 0.75)
+
+mtext("D", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+########
+#Panel E
+tmp <- Yr[Yr$Tr %in% Trts[2] ,]
+
+plot(tmp$X, tmp$Y, pch = '', xaxt = "n",
+     ylab = TeX('\\textit{\\hat{y}_{FT}}'), xlab = "Loc-Trt",
+     cex.axis = 0.75)
+
+Acc <- unique(tmp$Acc)
+for(j in 1:length(Acc)){
+  tmp2 <- tmp[tmp$Acc %in% Acc[j] ,]
+  lines(tmp2$X, tmp2$Y, col = alpha(wes_palette("Moonrise1")[3], 0.15))
+}
+
+points(tmp$X, tmp$Y, pch = 16, cex = 0.5, col = alpha(wes_palette("Moonrise1")[4], 0.15))
+unique(tmp[c(1,5)])[order(unique(tmp[c(1,5)]$X)) ,]
+axis(1, at = unique(tmp$X)[order(unique(tmp$X))], tick = T, 
+     labels = c(expression(M[H]), expression(M[L]), 
+                expression(T[H]), expression(T[L])),
+     cex.axis = 0.75)
+
+mtext("E", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+########
+#Panel F
+tmp <- Yr[Yr$Tr %in% Trts[3] ,]
+
+plot(tmp$X, tmp$Y, pch = '', xaxt = "n",
+     ylab = TeX('\\textit{\\hat{y}_{Fit}}'), xlab = "Loc-Trt",
+     cex.axis = 0.75)
+
+Acc <- unique(tmp$Acc)
+for(j in 1:length(Acc)){
+  tmp2 <- tmp[tmp$Acc %in% Acc[j] ,]
+  lines(tmp2$X, tmp2$Y, col = alpha(wes_palette("Moonrise1")[3], 0.15))
+}
+
+points(tmp$X, tmp$Y, pch = 16, cex = 0.5, col = alpha(wes_palette("Moonrise1")[4], 0.15))
+unique(tmp[c(1,5)])[order(unique(tmp[c(1,5)]$X)) ,]
+axis(1, at = unique(tmp$X)[order(unique(tmp$X))], tick = T, 
+     labels = c(expression(M[L]), expression(T[L]), 
+                expression(T[H]), expression(M[H])),
+     cex.axis = 0.75)
+
+mtext("F", 2,  adj=5, las=1, padj=-8, font=1, cex=0.8)
+
+dev.off()
+```
