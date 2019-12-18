@@ -12,28 +12,28 @@ This repo contains all the code and data used for the manuscript: "Examining the
 
 ## Table of Contents 
 * **1. Factor analysis**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/EFA.CFA.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/EFA.CFA.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/EFA.CFA.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/EFA.CFA.Rmd)
   
 * **2. Estimating plasticity**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/FW.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/FW.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/FW.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/FW.Rmd)
   
 * **3. Predicting breeding values using MTM**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/MTM.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/MTM.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/MTM.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/MTM.Rmd)
   
 * **4. Bayesian network**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/BayesianNetwork.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/BayesianNetwork.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/BayesianNetwork.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/BayesianNetwork.Rmd)
  
 * **5. Recursive model**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/RecursiveModel.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/RecursiveModel.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/RecursiveModel.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/RecursiveModel.Rmd)
   
 * **6. Supplemental data**
-  - [html output](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/htmlMarkdown/SupplementalData.html)
-  - [.Rmd File](https://rawgit.com/malachycampbell/ArabidopsisEFA/tree/master/Rmarkdown/SupplementalData.Rmd)
+  - [html output](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/htmlMarkdown/SupplementalData.html)
+  - [.Rmd File](https://htmlpreview.github.io/?https://github.com/malachycampbell/ArabidopsisEFA/blob/master/Rmarkdown/SupplementalData.Rmd)
  
   
  ## Funding
